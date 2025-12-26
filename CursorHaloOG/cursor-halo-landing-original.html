@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cursor Halo - The Context-Aware AI Assistant for macOS</title>
+  <meta name="description" content="A floating mini-widget that appears right next to your mouse cursor and gives you smart, context-aware actions.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-dark: #050507;
+      --bg-gradient: linear-gradient(135deg, #050507 0%, #0f0c29 100%);
+      --accent-cyan: #00f2ea;
+      --accent-purple: #ff00ff;
+      --glass-surface: rgba(255, 255, 255, 0.05);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --text-main: #ffffff;
+      --text-muted: rgba(255, 255, 255, 0.6);
+      --halo-glow: 0 0 50px rgba(0, 242, 234, 0.3);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-main);
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    /* --- Background FX --- */
+    .ambient-glow {
+      position: fixed;
+      width: 800px;
+      height: 800px;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, transparent 70%);
+      top: -200px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    /* --- Navigation --- */
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 24px 40px;
+      max-width: 1200px;
+      margin: 0 auto;
+      z-index: 100;
+      position: relative;
+    }
+
+    .logo {
+      font-weight: 800;
+      font-size: 1.5rem;
+      background: linear-gradient(to right, #fff, #a5b4fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-orb {
+      width: 24px;
+      height: 24px;
+      background: radial-gradient(circle at 30% 30%, #fff, var(--accent-cyan));
+      border-radius: 50%;
+      box-shadow: 0 0 15px var(--accent-cyan);
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 30px;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: color 0.3s ease;
+    }
+
+    .nav-links a:hover {
+      color: white;
+    }
+
+    /* --- Hero Section --- */
+    .hero {
+      text-align: center;
+      padding: 100px 20px 60px;
+      max-width: 1000px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    .hero-label {
+      display: inline-block;
+      padding: 6px 16px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--glass-border);
+      border-radius: 100px;
+      font-size: 0.85rem;
+      color: var(--accent-cyan);
+      margin-bottom: 24px;
+      backdrop-filter: blur(10px);
+    }
+
+    h1 {
+      font-size: 4.5rem;
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 24px;
+      letter-spacing: -0.02em;
+      background: linear-gradient(to bottom, #fff 0%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero p {
+      font-size: 1.4rem;
+      color: var(--text-muted);
+      max-width: 600px;
+      margin: 0 auto 40px;
+    }
+
+    /* --- Interactive Demo (The Hook) --- */
+    .demo-container {
+      position: relative;
+      max-width: 900px;
+      height: 500px;
+      margin: 0 auto;
+      background: rgba(20, 20, 30, 0.6);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      box-shadow: 0 40px 100px rgba(0,0,0,0.5);
+      backdrop-filter: blur(20px);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .mac-header {
+      height: 40px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 8px;
+    }
+
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot.red { background: #ff5f56; }
+    .dot.yellow { background: #ffbd2e; }
+    .dot.green { background: #27c93f; }
+
+    .demo-content {
+      flex: 1;
+      padding: 40px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: none; /* We simulate the cursor */
+      position: relative;
+    }
+
+    /* The Simulated App UI */
+    .code-mockup {
+      font-family: 'JetBrains Mono', monospace;
+      color: #a5b4fc;
+      background: #1e1e2e;
+      padding: 30px;
+      border-radius: 12px;
+      width: 100%;
+      max-width: 600px;
+      border: 1px solid rgba(255,255,255,0.1);
+      position: relative;
+    }
+
+    .selection-highlight {
+      background: rgba(99, 102, 241, 0.3);
+      color: white;
+      padding: 2px 0;
+      border-radius: 4px;
+    }
+
+    /* THE CURSOR HALO WIDGET */
+    .simulated-cursor {
+      width: 20px;
+      height: 20px;
+      background-image: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5.65376 12.3673H5.46026L5.31717 12.4976L0.500002 16.8829L0.500002 1.19135L17.9697 12.3673H5.65376Z' fill='white' stroke='black'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      pointer-events: none;
+      z-index: 100;
+      transition: all 0.1s ease-out;
+      animation: cursorMove 4s infinite ease-in-out;
+    }
+
+    .halo-widget {
+      position: absolute;
+      top: calc(50% + 20px);
+      left: calc(50% + 20px);
+      background: rgba(20, 20, 30, 0.85);
+      backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 16px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      width: 200px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.4), 0 0 20px rgba(139, 92, 246, 0.2);
+      opacity: 0;
+      transform: scale(0.9) translateY(10px);
+      animation: haloAppear 4s infinite ease-in-out;
+      z-index: 90;
+    }
+
+    .halo-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: white;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .halo-item:hover {
+      background: rgba(255,255,255,0.1);
+    }
+
+    .halo-item.active {
+      background: linear-gradient(90deg, rgba(99, 102, 241, 0.3), transparent);
+      border-left: 2px solid var(--accent-cyan);
+    }
+
+    .halo-orb {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #fff, var(--accent-purple));
+      box-shadow: 0 0 10px var(--accent-purple);
+    }
+
+    @keyframes cursorMove {
+      0% { top: 60%; left: 30%; }
+      20% { top: 45%; left: 52%; } /* Move to selection */
+      30% { top: 45%; left: 52%; } /* Pause/Hover */
+      80% { top: 45%; left: 52%; } /* Stay while menu open */
+      100% { top: 60%; left: 30%; }
+    }
+
+    @keyframes haloAppear {
+      0%, 25% { opacity: 0; transform: scale(0.9) translateY(10px); }
+      30% { opacity: 1; transform: scale(1) translateY(0); } /* Pop in */
+      75% { opacity: 1; transform: scale(1) translateY(0); }
+      80% { opacity: 0; transform: scale(0.9) translateY(5px); }
+      100% { opacity: 0; }
+    }
+
+    /* --- Feature Grid --- */
+    .features-section {
+      padding: 100px 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .section-title {
+      font-size: 2.5rem;
+      text-align: center;
+      margin-bottom: 60px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 30px;
+    }
+
+    .card {
+      background: var(--glass-surface);
+      border: 1px solid var(--glass-border);
+      padding: 40px;
+      border-radius: 24px;
+      transition: transform 0.3s ease, border-color 0.3s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-5px);
+      border-color: rgba(255,255,255,0.3);
+    }
+
+    .icon-box {
+      width: 50px;
+      height: 50px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      margin-bottom: 24px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .card h3 {
+      font-size: 1.4rem;
+      margin-bottom: 12px;
+    }
+
+    .card p {
+      color: var(--text-muted);
+      font-size: 1rem;
+    }
+
+    /* --- Integration Section --- */
+    .integration {
+      display: flex;
+      gap: 60px;
+      align-items: center;
+      padding: 100px 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .integration-text {
+      flex: 1;
+    }
+
+    .integration-visual {
+      flex: 1;
+      background: #000;
+      border-radius: 24px;
+      border: 1px solid rgba(255,255,255,0.2);
+      height: 400px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Placeholder for the 3D Component */
+    .orb-placeholder {
+      position: relative;
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #fff, #6366f1, #000);
+      box-shadow: 0 0 60px rgba(99, 102, 241, 0.5);
+      animation: float 6s ease-in-out infinite;
+    }
+
+    .orb-placeholder::after {
+      content: "3D Orb Slot";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-weight: bold;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+
+    /* --- CTA --- */
+    .cta-container {
+      text-align: center;
+      padding: 120px 20px;
+      background: linear-gradient(180deg, transparent 0%, rgba(99, 102, 241, 0.1) 100%);
+    }
+
+    .primary-btn {
+      display: inline-block;
+      background: white;
+      color: black;
+      font-weight: 700;
+      font-size: 1.1rem;
+      padding: 16px 40px;
+      border-radius: 100px;
+      text-decoration: none;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: 0 0 30px rgba(255,255,255,0.2);
+    }
+
+    .primary-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 50px rgba(255,255,255,0.4);
+    }
+
+    .secondary-btn {
+      display: inline-block;
+      color: white;
+      font-weight: 600;
+      padding: 16px 30px;
+      margin-left: 10px;
+      text-decoration: none;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+    }
+
+    .secondary-btn:hover {
+      opacity: 1;
+    }
+
+    .keyboard-hint {
+      margin-top: 20px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+    }
+
+    kbd {
+      background: rgba(255,255,255,0.1);
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.2);
+      color: white;
+    }
+
+    /* --- Responsive --- */
+    @media (max-width: 768px) {
+      h1 { font-size: 3rem; }
+      .integration { flex-direction: column; }
+      .demo-container { height: 400px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ambient-glow"></div>
+
+  <nav>
+    <div class="logo">
+      <div class="logo-orb"></div>
+      Cursor Halo
+    </div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it Works</a>
+      <a href="#pricing">Pricing</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="hero-label">✨ Native macOS App</div>
+    <h1>The smart assistant<br>that lives at your cursor.</h1>
+    <p>
+      Context-aware actions for whatever you're clicking on.
+      Available instantly via <strong>⇧ ⌘ Space</strong>.
+    </p>
+    <div>
+      <a href="#" class="primary-btn">Download Beta</a>
+      <a href="#" class="secondary-btn">Watch Video ▶</a>
+    </div>
+    <div class="keyboard-hint">
+      Press <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>Space</kbd> to invoke
+    </div>
+  </header>
+
+  <!-- THE INTERACTIVE DEMO (CSS ANIMATION) -->
+  <section class="demo-container">
+    <div class="mac-header">
+      <div class="dot red"></div>
+      <div class="dot yellow"></div>
+      <div class="dot green"></div>
+    </div>
+    <div class="demo-content">
+
+      <!-- Fake Code Editor -->
+      <div class="code-mockup">
+        <p><span style="color: #c678dd">function</span> <span style="color: #61afef">calculateData</span>() {</p>
+        <p>&nbsp;&nbsp;<span style="color: #c678dd">const</span> raw = <span style="color: #98c379">"User_ID_8492"</span>;</p>
+        <p class="selection-highlight">&nbsp;&nbsp;return raw.split('_')[2];</p>
+        <p>}</p>
+      </div>
+
+      <!-- The Cursor (Animated via CSS) -->
+      <div class="simulated-cursor"></div>
+
+      <!-- The Halo Widget (Animated via CSS) -->
+      <div class="halo-widget">
+        <div class="halo-item active">
+          <div class="halo-orb"></div>
+          <span>Explain Code</span>
+        </div>
+        <div class="halo-item">
+          <span>⚡</span>
+          <span>Refactor...</span>
+        </div>
+        <div class="halo-item">
+          <span>📋</span>
+          <span>Copy as JSON</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="features-section" id="features">
+    <div class="section-title">Why use Cursor Halo?</div>
+    <div class="grid">
+      <div class="card">
+        <div class="icon-box">🧠</div>
+        <h3>Context Aware</h3>
+        <p>Halo knows if you are hovering a file, selecting text, or editing code. It changes its buttons instantly to match your context.</p>
+      </div>
+      <div class="card">
+        <div class="icon-box">⚡</div>
+        <h3>Native Speed</h3>
+        <p>Built in Swift and Rust. Zero latency. The menu appears the millisecond you hit the hotkey. No Electron bloat.</p>
+      </div>
+      <div class="card">
+        <div class="icon-box">🤖</div>
+        <h3>AI Powered</h3>
+        <p>Highlight text and ask Halo to "Summarize," "Translate," or "Fix Grammar" without leaving your active window.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="integration">
+    <div class="integration-text">
+      <div class="hero-label" style="background: rgba(99,102,241,0.2); color: #a5b4fc; border-color: #6366f1;">Under the Hood</div>
+      <h2 style="font-size: 2.5rem; margin-bottom: 20px; line-height: 1.1;">Powered by your<br>Floating Orb technology.</h2>
+      <p style="color: var(--text-muted); margin-bottom: 30px; font-size: 1.1rem;">
+        We integrated the same AAA-quality 3D rendering engine from our web components directly into the macOS native layer.
+      </p>
+      <ul style="list-style: none; display: flex; flex-direction: column; gap: 15px;">
+        <li style="display: flex; gap: 10px; align-items: center;">
+          <span style="color: var(--accent-cyan)">✓</span> Shared DNA with our 3D Web Component
+        </li>
+        <li style="display: flex; gap: 10px; align-items: center;">
+          <span style="color: var(--accent-cyan)">✓</span> Smooth 60FPS animations
+        </li>
+        <li style="display: flex; gap: 10px; align-items: center;">
+          <span style="color: var(--accent-cyan)">✓</span> Beautiful glassmorphism UI
+        </li>
+      </ul>
+    </div>
+
+    <div class="integration-visual">
+      <!--
+        PRO TIP: If you have your 'floating-orb.js' hosted,
+        you can replace this div with:
+        <script type="module" src="floating-orb.js"></script>
+        <floating-orb color="#00f2ea" size="300"></floating-orb>
+      -->
+      <div class="orb-placeholder"></div>
+    </div>
+  </section>
+
+  <div class="cta-container">
+    <h2 style="font-size: 3rem; margin-bottom: 20px;">Stop hunting through menus.</h2>
+    <p style="color: var(--text-muted); margin-bottom: 40px; font-size: 1.2rem;">
+      Get the actions you need, exactly where you are looking.
+    </p>
+    <a href="#" class="primary-btn">Get Cursor Halo for Mac</a>
+  </div>
+
+</body>
+</html>
